@@ -6,8 +6,6 @@ I am a DIY enthusiast and maker focused on sustainability, microcontrollers, and
 I'm developing a series of filtration and growth systems based on precision-cut recycled PET strips (1mm, 3mm, 5mm).
 
 - **[Recycled PET Strip Pond Filter](https://github.com/gizmocology/recycled-pet-strip-pond-filter)** - Up-flow vortex filtration for crystal clear fish ponds.
-- **[Recycled PET Strip Domestic Filtration](https://github.com/gizmocology/recycled-pet-strip-domestic-filtration)** - Hybrid water treatment for city water supply.
-- **[Recycled PET Strip Aquaponics System](https://github.com/gizmocology/recycled-pet-strip-aquaponics-system)** - Sustainable food production with a pilot project of 100 chili polybags.
 
 ## 🚁 Other Tech Interests
 Beyond water treatment, I spend my time building and experimenting with:
