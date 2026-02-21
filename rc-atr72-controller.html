@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>ATR-72 RC Controller</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#050810; --panel:#0a0f1e; --panel2:#0d1428; --border:#1a2a4a;
+    --amber:#f5a623; --amber-dim:#3a2508;
+    --cyan:#00d4ff;  --cyan-dim:#003a45;
+    --green:#00ff88; --green-dim:#003320;
+    --red:#ff3355;   --red-dim:#3a0010;
+    --text:#c8d8f0;  --text-dim:#3a4a6a;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;}
+  body{
+    background:var(--bg);
+    font-family:'Share Tech Mono',monospace;
+    color:var(--text);
+    height:100dvh; width:100vw;
+    overflow:hidden;
+    display:flex; flex-direction:column;
+  }
+  body::before{
+    content:''; position:fixed; inset:0;
+    background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);
+    background-size:36px 36px; opacity:.15; pointer-events:none; z-index:0;
+  }
+
+  /* TOP BAR */
+  .topbar{
+    flex-shrink:0; display:flex; justify-content:space-between; align-items:center;
+    padding:7px 14px; background:var(--panel); border-bottom:1px solid var(--border);
+    position:relative; z-index:10;
+  }
+  .logo{font-family:'Orbitron',sans-serif;font-weight:900;font-size:13px;letter-spacing:3px;color:var(--amber);text-shadow:0 0 10px #f5a62355;}
+  .logo span{color:var(--cyan);}
+  .ws-pill{display:flex;align-items:center;gap:5px;background:var(--panel2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:9px;}
+  .ws-dot{width:7px;height:7px;border-radius:50%;background:var(--text-dim);transition:all .3s;}
+  .ws-dot.connected{background:var(--green);box-shadow:0 0 6px var(--green);}
+  .ws-dot.connecting{background:var(--amber);animation:blink .5s infinite;}
+  .ws-dot.error{background:var(--red);}
+  @keyframes blink{50%{opacity:.15}}
+
+  /* HORIZON */
+  .horizon-section{
+    flex-shrink:0; display:flex; flex-direction:column; align-items:center;
+    padding:10px 0 4px; position:relative; z-index:5;
+  }
+  .horizon-wrap{position:relative;}
+  canvas#horizon{border-radius:50%;border:2px solid var(--cyan);box-shadow:0 0 12px #00d4ff44;display:block;}
+  .aircraft-overlay{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;}
+  .wing{height:3px;background:var(--amber);box-shadow:0 0 6px var(--amber);border-radius:2px;}
+  .nose-dot{width:9px;height:9px;background:var(--amber);border-radius:50%;box-shadow:0 0 8px var(--amber);margin:0 3px;flex-shrink:0;}
+
+  /* ROLL BAR */
+  .roll-bar-wrap{margin-top:7px;position:relative;height:16px;display:flex;align-items:center;}
+  .roll-bg{position:absolute;inset:0;border-radius:8px;background:linear-gradient(90deg,#ff335533,transparent,#00ff8833);border:1px solid var(--border);}
+  .roll-center-tick{position:absolute;left:50%;transform:translateX(-50%);width:2px;height:10px;background:var(--text-dim);top:3px;}
+  .roll-cursor{position:absolute;top:50%;transform:translate(-50%,-50%);width:12px;height:12px;background:var(--amber);border-radius:50%;box-shadow:0 0 8px var(--amber);left:50%;transition:left .07s;}
+
+  /* DATA ROW */
+  .data-row{flex-shrink:0;display:flex;justify-content:center;gap:8px;padding:5px 14px;position:relative;z-index:5;}
+  .dcell{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:4px 10px;text-align:center;flex:1;max-width:88px;}
+  .dcell .dl{font-size:8px;color:var(--text-dim);letter-spacing:1px;}
+  .dcell .dv{font-size:14px;margin-top:1px;font-family:'Orbitron',sans-serif;font-weight:700;}
+
+  /* MOTOR ROW */
+  .motor-row{flex-shrink:0;display:flex;gap:8px;padding:0 14px;position:relative;z-index:5;}
+  .motor-card{flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;display:flex;align-items:center;gap:8px;}
+  .motor-card .ml{font-size:9px;color:var(--text-dim);letter-spacing:1px;flex-shrink:0;}
+  .motor-track{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden;}
+  .motor-fill{height:100%;background:linear-gradient(90deg,var(--amber),var(--red));border-radius:3px;transition:width .1s;width:0%;}
+  .motor-pct{font-size:11px;color:var(--amber);min-width:30px;text-align:right;}
+
+  /* THROTTLE CENTER */
+  .throttle-section{
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    position:relative; z-index:5; padding:8px 0; min-height:0;
+  }
+  .th-label{font-size:9px;letter-spacing:2px;color:var(--text-dim);margin-bottom:8px;}
+  .th-track{
+    width:min(300px,84vw); height:56px;
+    background:var(--panel2); border:1px solid var(--border); border-radius:28px;
+    position:relative; cursor:pointer; touch-action:none; overflow:hidden;
+  }
+  .th-fill{
+    position:absolute;top:0;left:0;bottom:0;
+    background:linear-gradient(90deg,var(--green-dim),var(--green),var(--cyan));
+    border-radius:28px; width:0%; transition:width .05s; box-shadow:0 0 14px #00ff8822;
+  }
+  .th-thumb{
+    position:absolute; top:50%; transform:translate(-50%,-50%);
+    width:48px; height:48px;
+    background:var(--panel); border:2px solid var(--cyan); border-radius:50%;
+    box-shadow:0 0 10px #00d4ff55;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Orbitron',sans-serif; font-size:12px; font-weight:700; color:var(--cyan);
+    left:0%; transition:left .05s; cursor:grab;
+  }
+  .th-scale{width:min(300px,84vw);display:flex;justify-content:space-between;font-size:8px;color:var(--text-dim);margin-top:5px;padding:0 4px;}
+
+  /* PRESET BTNS */
+  .presets{display:flex;gap:6px;margin-top:10px;}
+  .pbtn{
+    background:var(--panel2); border:1px solid var(--border); border-radius:6px;
+    color:var(--text-dim); font-family:'Share Tech Mono',monospace; font-size:10px;
+    padding:7px 13px; cursor:pointer; transition:all .15s; letter-spacing:1px;
+  }
+  .pbtn:active{background:var(--cyan-dim);border-color:var(--cyan);color:var(--cyan);}
+
+  /* BOTTOM */
+  .bottom-bar{flex-shrink:0;display:flex;gap:8px;padding:8px 14px 12px;position:relative;z-index:10;}
+  .btn{
+    flex:1; font-family:'Orbitron',sans-serif; font-size:11px; font-weight:700;
+    letter-spacing:1px; padding:11px 8px; border-radius:8px; border:1px solid;
+    cursor:pointer; background:transparent; transition:all .15s;
+  }
+  .btn-arm{border-color:var(--green);color:var(--green);}
+  .btn-arm.armed{background:var(--red-dim);color:var(--red);border-color:var(--red);}
+  .btn-cal{border-color:var(--cyan);color:var(--cyan);}
+  .btn-cal:active{background:var(--cyan-dim);}
+  .btn-cfg{border-color:var(--amber);color:var(--amber);}
+  .btn-cfg:active{background:var(--amber-dim);}
+
+  /* DEBUG */
+  .debug{
+    position:fixed;bottom:0;left:0;right:0;
+    background:#000c; font-size:9px; color:var(--text-dim);
+    text-align:center; padding:2px 6px; z-index:400; pointer-events:none;
+  }
+
+  /* OVERLAY */
+  .overlay{position:fixed;inset:0;background:#050810f2;display:flex;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(6px);}
+  .overlay.hidden{display:none;}
+  .modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:22px 18px;width:min(340px,92vw);box-shadow:0 0 40px #00d4ff22;}
+  .modal h2{font-family:'Orbitron',sans-serif;font-size:13px;letter-spacing:2px;color:var(--amber);text-shadow:0 0 8px #f5a62333;margin-bottom:16px;text-align:center;}
+  .fg{margin-bottom:12px;}
+  .fg label{display:block;font-size:9px;color:var(--text-dim);letter-spacing:1px;margin-bottom:5px;}
+  .fg input{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--cyan);font-family:'Share Tech Mono',monospace;font-size:14px;padding:8px 12px;outline:none;}
+  .fg input:focus{border-color:var(--cyan);box-shadow:0 0 8px #00d4ff33;}
+  .fg2{display:flex;gap:8px;} .fg2 .fg{flex:1;}
+  .modal-btns{display:flex;gap:8px;margin-top:16px;}
+
+  /* SPLASH */
+  .splash{text-align:center;padding:8px;}
+  .splash .ico{font-size:52px;display:block;margin-bottom:10px;filter:drop-shadow(0 0 10px #f5a62388);}
+  .splash p{font-size:11px;color:var(--text-dim);line-height:1.9;margin-bottom:20px;}
+  .splash .sbtn{width:100%;font-size:13px;padding:14px;border-radius:10px;letter-spacing:2px;}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">ATR<span>72</span></div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div class="ws-pill"><div class="ws-dot" id="wsDot"></div><span id="wsLbl">OFFLINE</span></div>
+    <span style="font-size:9px;color:var(--text-dim)" id="pingTxt">--ms</span>
+  </div>
+</div>
+
+<!-- HORIZON -->
+<div class="horizon-section">
+  <div class="horizon-wrap" id="horizonWrap">
+    <canvas id="horizon"></canvas>
+    <div class="aircraft-overlay">
+      <div class="wing" id="wingL"></div>
+      <div class="nose-dot"></div>
+      <div class="wing" id="wingR"></div>
+    </div>
+  </div>
+  <div class="roll-bar-wrap" id="rollBarWrap">
+    <div class="roll-bg"></div>
+    <div class="roll-center-tick"></div>
+    <div class="roll-cursor" id="rollCursor"></div>
+  </div>
+</div>
+
+<!-- DATA ROW -->
+<div class="data-row">
+  <div class="dcell"><div class="dl">ROLL</div><div class="dv" style="color:var(--amber)" id="dRoll">0°</div></div>
+  <div class="dcell"><div class="dl">STATUS</div><div class="dv" style="color:var(--red);font-size:11px" id="dSts">SAFE</div></div>
+  <div class="dcell"><div class="dl">PITCH</div><div class="dv" style="color:var(--cyan)" id="dPitch">0°</div></div>
+</div>
+
+<!-- MOTOR ROW -->
+<div class="motor-row">
+  <div class="motor-card"><div class="ml">L-MTR</div><div class="motor-track"><div class="motor-fill" id="mLBar"></div></div><div class="motor-pct" id="mLPct">0%</div></div>
+  <div class="motor-card"><div class="ml">R-MTR</div><div class="motor-track"><div class="motor-fill" id="mRBar"></div></div><div class="motor-pct" id="mRPct">0%</div></div>
+</div>
+
+<!-- THROTTLE -->
+<div class="throttle-section">
+  <div class="th-label">── THROTTLE ──</div>
+  <div class="th-track" id="thTrack">
+    <div class="th-fill" id="thFill"></div>
+    <div class="th-thumb" id="thThumb"><span id="thPct">0</span></div>
+  </div>
+  <div class="th-scale"><span>IDLE</span><span>25%</span><span>50%</span><span>75%</span><span>MAX</span></div>
+  <div class="presets">
+    <button class="pbtn" onclick="setThr(0)">IDLE</button>
+    <button class="pbtn" onclick="setThr(0.3)">30%</button>
+    <button class="pbtn" onclick="setThr(0.5)">50%</button>
+    <button class="pbtn" onclick="setThr(0.7)">70%</button>
+  </div>
+</div>
+
+<!-- BOTTOM -->
+<div class="bottom-bar">
+  <button class="btn btn-arm" id="armBtn" onclick="toggleArm()">ARM</button>
+  <button class="btn btn-cal" id="calBtn" onclick="calibrate()">CAL</button>
+  <button class="btn btn-cfg" onclick="openCfg()">SETUP</button>
+</div>
+
+<!-- DEBUG -->
+<div class="debug" id="dbg">sensor: menunggu... | buka di HP untuk gyro</div>
+
+<!-- SPLASH -->
+<div class="overlay" id="splashOv">
+  <div class="modal splash">
+    <span class="ico">✈️</span>
+    <h2>ATR-72 RC CONTROLLER</h2>
+    <p>
+      Miring <b style="color:var(--amber)">kiri/kanan</b> → belok (differential thrust)<br>
+      Miring <b style="color:var(--cyan)">depan/belak</b> → elevator<br>
+      Geser slider <b style="color:var(--green)">tengah</b> → throttle<br><br>
+      Pegang HP tegak seperti biasa saat terbang.
+    </p>
+    <button class="btn btn-arm sbtn" onclick="startApp()">AKTIFKAN SENSOR & MULAI</button>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div class="overlay hidden" id="cfgOv">
+  <div class="modal">
+    <h2>⚙ SETUP</h2>
+    <div class="fg"><label>ESP IP ADDRESS</label><input id="cIp" value="192.168.4.1"></div>
+    <div class="fg2">
+      <div class="fg"><label>WS PORT</label><input type="number" id="cPort" value="81"></div>
+      <div class="fg"><label>RATE (ms)</label><input type="number" id="cRate" value="50"></div>
+    </div>
+    <div class="fg2">
+      <div class="fg"><label>ROLL SENS (°)</label><input type="number" id="cRoll" value="30"></div>
+      <div class="fg"><label>PITCH SENS (°)</label><input type="number" id="cPitch" value="20"></div>
+    </div>
+    <div style="font-size:9px;color:var(--text-dim);margin-top:2px">
+      Sensor gyro: <span id="sensSts" style="color:var(--text-dim)">belum aktif</span>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-cfg" onclick="saveCfg()" style="flex:2">SAVE & CONNECT</button>
+      <button class="btn" style="border-color:var(--text-dim);color:var(--text-dim)" onclick="closeCfg()">BATAL</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══ STATE ═══
+let ws=null, armed=false, throttle=0;
+let rollOff=0, pitchOff=0, curRoll=0, curPitch=0;
+let gyroOk=false, sendTmr=null, pingTmr=null, lastPing=0;
+let cfg={ip:'192.168.4.1',port:81,rate:50,rollSens:30,pitchSens:20};
+
+// ═══ CANVAS SETUP ═══
+const canvas=document.getElementById('horizon');
+const ctx=canvas.getContext('2d');
+
+function resizeAll(){
+  const s=Math.min(180, window.innerWidth*0.46);
+  canvas.width=s; canvas.height=s;
+  // wing widths proportional
+  document.getElementById('wingL').style.width=(s*0.32)+'px';
+  document.getElementById('wingR').style.width=(s*0.32)+'px';
+  document.getElementById('rollBarWrap').style.width=s+'px';
+  drawHorizon(curRoll, curPitch);
+}
+resizeAll();
+window.addEventListener('resize', resizeAll);
+
+function drawHorizon(roll, pitch){
+  const s=canvas.width, R=s/2;
+  ctx.clearRect(0,0,s,s);
+  ctx.save();
+  ctx.beginPath(); ctx.arc(R,R,R-2,0,Math.PI*2); ctx.clip();
+  ctx.fillStyle='#050810'; ctx.fillRect(0,0,s,s);
+  ctx.translate(R,R);
+  ctx.rotate(roll*Math.PI/180);
+  const ppd=s/55, pp=pitch*ppd;
+  // sky
+  const sky=ctx.createLinearGradient(0,-R*2-pp,0,-pp);
+  sky.addColorStop(0,'#001020'); sky.addColorStop(1,'#004488');
+  ctx.fillStyle=sky; ctx.fillRect(-R*2,-R*2-pp,R*4,R*2);
+  // ground
+  const gnd=ctx.createLinearGradient(0,-pp,0,R-pp+R);
+  gnd.addColorStop(0,'#3a1a00'); gnd.addColorStop(1,'#100800');
+  ctx.fillStyle=gnd; ctx.fillRect(-R*2,-pp,R*4,R*2);
+  // horizon
+  ctx.strokeStyle='rgba(255,255,255,0.4)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(-R*2,-pp); ctx.lineTo(R*2,-pp); ctx.stroke();
+  // pitch lines
+  ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=0.8;
+  ctx.fillStyle='rgba(255,255,255,0.35)';
+  ctx.font=Math.round(s*.055)+'px Share Tech Mono'; ctx.textAlign='center';
+  for(let d=-30;d<=30;d+=10){
+    if(!d) continue;
+    const y=-pp-d*ppd, w=d%20===0?R*.36:R*.2;
+    ctx.beginPath(); ctx.moveTo(-w,y); ctx.lineTo(w,y); ctx.stroke();
+    if(d%20===0) ctx.fillText(d,w+R*.1,y+3);
+  }
+  // roll triangle
+  ctx.restore(); ctx.save(); ctx.translate(R,R);
+  ctx.rotate(roll*Math.PI/180);
+  ctx.fillStyle='#f5a623'; ctx.shadowColor='#f5a623'; ctx.shadowBlur=7;
+  const tr=R-10;
+  ctx.beginPath(); ctx.moveTo(0,-tr); ctx.lineTo(-5,-(tr-12)); ctx.lineTo(5,-(tr-12));
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+// ═══ THROTTLE DRAG ═══
+const thTrack=document.getElementById('thTrack');
+let dragging=false;
+
+function thrFromX(x){
+  const r=thTrack.getBoundingClientRect();
+  return Math.max(0,Math.min(1,(x-r.left)/r.width));
+}
+function setThr(v){
+  throttle=Math.max(0,Math.min(1,v));
+  const p=Math.round(throttle*100);
+  document.getElementById('thFill').style.width=p+'%';
+  document.getElementById('thThumb').style.left=p+'%';
+  document.getElementById('thPct').textContent=p;
+}
+thTrack.addEventListener('touchstart',e=>{dragging=true;setThr(thrFromX(e.touches[0].clientX));e.preventDefault();},{passive:false});
+document.addEventListener('touchmove',e=>{if(!dragging)return;setThr(thrFromX(e.touches[0].clientX));e.preventDefault();},{passive:false});
+document.addEventListener('touchend',()=>dragging=false);
+thTrack.addEventListener('mousedown',e=>{dragging=true;setThr(thrFromX(e.clientX));});
+document.addEventListener('mousemove',e=>{if(dragging)setThr(thrFromX(e.clientX));});
+document.addEventListener('mouseup',()=>dragging=false);
+
+// ═══ GYROSCOPE ═══
+function setupGyro(){
+  window.addEventListener('deviceorientation', onOrient, true);
+  setTimeout(()=>{
+    if(!gyroOk){
+      document.getElementById('sensSts').textContent='⚠ tidak terdeteksi';
+      document.getElementById('sensSts').style.color='var(--red)';
+      document.getElementById('dbg').textContent='⚠ Gyro tidak aktif. Pastikan buka di HP via browser, bukan PC.';
+    }
+  },3000);
+}
+
+function onOrient(e){
+  if(e.gamma===null&&e.beta===null) return;
+  gyroOk=true;
+  document.getElementById('sensSts').textContent='✓ aktif';
+  document.getElementById('sensSts').style.color='var(--green)';
+
+  curRoll =(e.gamma||0)-rollOff;
+  curPitch=(e.beta ||0)-pitchOff;
+
+  document.getElementById('dbg').textContent=
+    `γ:${Math.round(e.gamma||0)}° β:${Math.round(e.beta||0)}° | roll:${Math.round(curRoll)}° pitch:${Math.round(curPitch)}°`;
+
+  updateUI();
+}
+
+function updateUI(){
+  const rc=Math.max(-90,Math.min(90,curRoll));
+  const pc=Math.max(-45,Math.min(45,curPitch));
+  drawHorizon(rc,-pc);
+  // roll cursor
+  const pct=50+(rc/cfg.rollSens)*50;
+  document.getElementById('rollCursor').style.left=Math.max(3,Math.min(97,pct))+'%';
+  document.getElementById('dRoll').textContent=Math.round(rc)+'°';
+  document.getElementById('dPitch').textContent=Math.round(pc)+'°';
+  // motors
+  const diff=(Math.max(-cfg.rollSens,Math.min(cfg.rollSens,rc))/cfg.rollSens)*0.5;
+  const mL=armed?Math.max(0,Math.min(1,throttle-diff)):0;
+  const mR=armed?Math.max(0,Math.min(1,throttle+diff)):0;
+  const lp=Math.round(mL*100), rp=Math.round(mR*100);
+  document.getElementById('mLBar').style.width=lp+'%';
+  document.getElementById('mRBar').style.width=rp+'%';
+  document.getElementById('mLPct').textContent=lp+'%';
+  document.getElementById('mRPct').textContent=rp+'%';
+}
+
+// ═══ WEBSOCKET ═══
+function connect(){
+  if(ws){ws.close();ws=null;}
+  setWs('connecting','CONNECTING');
+  try{
+    ws=new WebSocket(`ws://${cfg.ip}:${cfg.port}`);
+    ws.onopen =()=>{setWs('connected','CONNECTED');startSend();};
+    ws.onclose=()=>{setWs('','OFFLINE');stopSend();setTimeout(connect,3000);};
+    ws.onerror=()=>setWs('error','ERROR');
+    ws.onmessage=e=>{if(e.data==='pong')document.getElementById('pingTxt').textContent=(Date.now()-lastPing)+'ms';};
+  }catch(err){setWs('error','ERROR');}
+}
+function setWs(c,l){
+  document.getElementById('wsDot').className='ws-dot '+c;
+  document.getElementById('wsLbl').textContent=l;
+}
+function startSend(){
+  stopSend();
+  sendTmr=setInterval(sendData,cfg.rate);
+  pingTmr=setInterval(()=>{if(ws?.readyState===1){lastPing=Date.now();ws.send('ping');}},1000);
+}
+function stopSend(){clearInterval(sendTmr);clearInterval(pingTmr);}
+function sendData(){
+  if(!ws||ws.readyState!==1||!armed) return;
+  const rc=Math.max(-cfg.rollSens,Math.min(cfg.rollSens,curRoll));
+  const diff=(rc/cfg.rollSens)*0.5;
+  const mL=Math.max(0,Math.min(1,throttle-diff));
+  const mR=Math.max(0,Math.min(1,throttle+diff));
+  const el=Math.max(-1,Math.min(1,curPitch/cfg.pitchSens));
+  ws.send(JSON.stringify({ml:Math.round(mL*100),mr:Math.round(mR*100),el:Math.round(el*100),t:Math.round(throttle*100)}));
+}
+
+// ═══ ARM ═══
+function toggleArm(){
+  armed=!armed;
+  const btn=document.getElementById('armBtn');
+  const sts=document.getElementById('dSts');
+  if(armed){btn.textContent='DISARM';btn.classList.add('armed');sts.textContent='ARMED';sts.style.color='var(--green)';}
+  else{btn.textContent='ARM';btn.classList.remove('armed');sts.textContent='SAFE';sts.style.color='var(--red)';setThr(0);ws?.readyState===1&&ws.send(JSON.stringify({ml:0,mr:0,el:0,t:0}));}
+}
+
+// ═══ CALIBRATE ═══
+function calibrate(){
+  rollOff+=curRoll; pitchOff+=curPitch;
+  const b=document.getElementById('calBtn');
+  b.textContent='✓ OK'; b.style.color='var(--green)';
+  setTimeout(()=>{b.textContent='CAL';b.style.color='var(--cyan)';},1200);
+}
+
+// ═══ SETTINGS ═══
+function openCfg(){
+  document.getElementById('cIp').value=cfg.ip;
+  document.getElementById('cPort').value=cfg.port;
+  document.getElementById('cRate').value=cfg.rate;
+  document.getElementById('cRoll').value=cfg.rollSens;
+  document.getElementById('cPitch').value=cfg.pitchSens;
+  document.getElementById('cfgOv').classList.remove('hidden');
+}
+function closeCfg(){document.getElementById('cfgOv').classList.add('hidden');}
+function saveCfg(){
+  cfg.ip=document.getElementById('cIp').value;
+  cfg.port=+document.getElementById('cPort').value;
+  cfg.rate=+document.getElementById('cRate').value;
+  cfg.rollSens=+document.getElementById('cRoll').value;
+  cfg.pitchSens=+document.getElementById('cPitch').value;
+  closeCfg(); connect();
+}
+
+// ═══ START / PERMISSION ═══
+function startApp(){
+  if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
+    DeviceOrientationEvent.requestPermission()
+      .then(s=>{
+        if(s==='granted'){
+          setupGyro();
+          document.getElementById('splashOv').classList.add('hidden');
+          connect();
+        } else alert('Izin sensor ditolak. Cek pengaturan Safari > Privasi > Sensor Gerak.');
+      }).catch(e=>alert('Error: '+e));
+  } else {
+    setupGyro();
+    document.getElementById('splashOv').classList.add('hidden');
+    connect();
+  }
+}
+
+// init draw
+drawHorizon(0,0);
+</script>
+</body>
+</html>
